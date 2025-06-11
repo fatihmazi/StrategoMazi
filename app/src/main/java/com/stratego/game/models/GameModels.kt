@@ -10,9 +10,9 @@ data class Position(
     fun isValid(): Boolean = row in 0..9 && col in 0..9
 
     fun isWater(): Boolean {
-        // Sol göl: C5, C6, D5, D6 (2,4), (2,5), (3,4), (3,5)
-        // Sağ göl: G5, G6, H5, H6 (2,6), (2,7), (3,6), (3,7)
-        return (row in 2..3 && col in 4..5) || (row in 2..3 && col in 6..7)
+        // Sol göl: C5, C6, D5, D6 → (4,2), (4,3), (5,2), (5,3)
+        // Sağ göl: G5, G6, H5, H6 → (4,6), (4,7), (5,6), (5,7)
+        return (row in 4..5 && col in 2..3) || (row in 4..5 && col in 6..7)
     }
 
     fun getAdjacentPositions(): List<Position> {
@@ -38,30 +38,26 @@ enum class PieceType(
     MARSHAL("Mareşal", 1, 1, "👨‍✈️"),
     GENERAL("General", 2, 1, "⭐"),
     COLONEL("Albay", 3, 2, "🎖️"),
-    MAJOR("Yarbay", 4, 3, "🏅"),
-    CAPTAIN("Binbaşı", 5, 4, "🎯"),
-    LIEUTENANT("Yüzbaşı", 6, 4, "🔰"),
-    SERGEANT("Üsteğmen", 7, 4, "⚡"),
-    PRIVATE("Er", 8, 5, "🛡️"),
-    SCOUT("Kaşif", 9, 8, "🔍"),
+    MAJOR("Binbaşı", 4, 3, "🏅"),
+    CAPTAIN("Yüzbaşı", 5, 4, "🎯"),
+    LIEUTENANT("Teğmen", 6, 4, "🔰"),
+    SERGEANT("Astsubay", 7, 4, "⚡"),
+    SCOUT("Keşifçi", 8, 8, "🔍"),
+    MINER("Mayın Temizleyici", 9, 5, "⛏️"),
     SPY("Casus", 10, 1, "🕵️"),
-    MINER("İstihkamcı", 11, 5, "⛏️"),
-    BOMB("Mayın", 12, 6, "💣", false),
-    FLAG("Bayrak", 13, 1, "🏴", false);
+    BOMB("Bomba", 11, 6, "💣", false),
+    FLAG("Bayrak", 12, 1, "🏴", false);
 
-    /**
-     * Bu taşın başka taşı yenip yenemeyeceğini kontrol eder
-     */
     fun canDefeat(other: PieceType): Boolean {
         return when {
             // Casus sadece Mareşali yenebilir
             this == SPY && other == MARSHAL -> true
             this == SPY && other != MARSHAL -> false
 
-            // İstihkamcı mayını yok edebilir
+            // Mayın Temizleyici bombayı yok edebilir
             this == MINER && other == BOMB -> true
 
-            // Mayın sadece İstihkamcı tarafından yok edilebilir
+            // Bomba sadece Mayın Temizleyici tarafından yok edilebilir
             other == BOMB && this != MINER -> false
 
             // Bayrak her zaman yenilir
@@ -71,6 +67,7 @@ enum class PieceType(
             else -> this.rank < other.rank
         }
     }
+
 }
 
 /**
@@ -349,51 +346,59 @@ object PieceSetupTemplates {
 
     fun getAggressiveSetup(): Map<Position, PieceType> {
         return mapOf(
-            // İlk sıra - güçlü taşlar önde
-            Position(0, 0) to PieceType.MARSHAL,
-            Position(0, 1) to PieceType.GENERAL,
-            Position(0, 2) to PieceType.COLONEL,
-            Position(0, 3) to PieceType.COLONEL,
-            Position(0, 4) to PieceType.MAJOR,
-            Position(0, 5) to PieceType.MAJOR,
-            Position(0, 6) to PieceType.MAJOR,
-            Position(0, 7) to PieceType.CAPTAIN,
-            Position(0, 8) to PieceType.CAPTAIN,
-            Position(0, 9) to PieceType.CAPTAIN,
+            // 1. sıra (10 taş) - Keşifçiler ve güçlü taşlar önde
+            Position(0, 0) to PieceType.SCOUT,
+            Position(0, 1) to PieceType.SCOUT,
+            Position(0, 2) to PieceType.SCOUT,
+            Position(0, 3) to PieceType.SCOUT,
+            Position(0, 4) to PieceType.MARSHAL,
+            Position(0, 5) to PieceType.GENERAL,
+            Position(0, 6) to PieceType.COLONEL,
+            Position(0, 7) to PieceType.COLONEL,
+            Position(0, 8) to PieceType.MAJOR,
+            Position(0, 9) to PieceType.MAJOR,
 
-            // İkinci sıra - karışık
-            Position(1, 0) to PieceType.SPY,
+            // 2. sıra (10 taş) - Orta seviye
+            Position(1, 0) to PieceType.SCOUT,
             Position(1, 1) to PieceType.SCOUT,
             Position(1, 2) to PieceType.SCOUT,
             Position(1, 3) to PieceType.SCOUT,
-            Position(1, 4) to PieceType.MINER,
-            Position(1, 5) to PieceType.MINER,
-            Position(1, 6) to PieceType.LIEUTENANT,
-            Position(1, 7) to PieceType.LIEUTENANT,
-            Position(1, 8) to PieceType.LIEUTENANT,
+            Position(1, 4) to PieceType.MAJOR,
+            Position(1, 5) to PieceType.CAPTAIN,
+            Position(1, 6) to PieceType.CAPTAIN,
+            Position(1, 7) to PieceType.CAPTAIN,
+            Position(1, 8) to PieceType.CAPTAIN,
             Position(1, 9) to PieceType.LIEUTENANT,
 
-            // Üçüncü sıra - savunma
-            Position(2, 0) to PieceType.BOMB,
-            Position(2, 1) to PieceType.BOMB,
-            Position(2, 2) to PieceType.SERGEANT,
+            // 3. sıra (10 taş) - Karışık savunma
+            Position(2, 0) to PieceType.LIEUTENANT,
+            Position(2, 1) to PieceType.LIEUTENANT,
+            Position(2, 2) to PieceType.LIEUTENANT,
             Position(2, 3) to PieceType.SERGEANT,
-            Position(2, 8) to PieceType.SERGEANT,
-            Position(2, 9) to PieceType.SERGEANT,
+            Position(2, 4) to PieceType.SERGEANT,
+            Position(2, 5) to PieceType.SERGEANT,
+            Position(2, 6) to PieceType.SERGEANT,
+            Position(2, 7) to PieceType.MINER,
+            Position(2, 8) to PieceType.MINER,
+            Position(2, 9) to PieceType.SPY,
 
-            // Dördüncü sıra - arka savunma
-            Position(3, 0) to PieceType.FLAG,
-            Position(3, 1) to PieceType.BOMB,
+            // 4. sıra (10 taş) - Savunma hattı
+            Position(3, 0) to PieceType.BOMB,
+            Position(3, 1) to PieceType.FLAG,
             Position(3, 2) to PieceType.BOMB,
             Position(3, 3) to PieceType.BOMB,
-            Position(3, 8) to PieceType.BOMB,
+            Position(3, 4) to PieceType.BOMB,
+            Position(3, 5) to PieceType.BOMB,
+            Position(3, 6) to PieceType.BOMB,
+            Position(3, 7) to PieceType.MINER,
+            Position(3, 8) to PieceType.MINER,
             Position(3, 9) to PieceType.MINER
         )
     }
 
     fun getDefensiveSetup(): Map<Position, PieceType> {
         return mapOf(
-            // İlk sıra - scout'lar önde
+            // 1. sıra (10 taş) - Keşifçiler önde
             Position(0, 0) to PieceType.SCOUT,
             Position(0, 1) to PieceType.SCOUT,
             Position(0, 2) to PieceType.SCOUT,
@@ -402,44 +407,96 @@ object PieceSetupTemplates {
             Position(0, 5) to PieceType.SCOUT,
             Position(0, 6) to PieceType.SCOUT,
             Position(0, 7) to PieceType.SCOUT,
-            Position(0, 8) to PieceType.PRIVATE,
-            Position(0, 9) to PieceType.PRIVATE,
+            Position(0, 8) to PieceType.SERGEANT,
+            Position(0, 9) to PieceType.SERGEANT,
 
-            // İkinci sıra - orta kademeler
-            Position(1, 0) to PieceType.PRIVATE,
-            Position(1, 1) to PieceType.PRIVATE,
-            Position(1, 2) to PieceType.PRIVATE,
-            Position(1, 3) to PieceType.SERGEANT,
-            Position(1, 4) to PieceType.SERGEANT,
-            Position(1, 5) to PieceType.SERGEANT,
-            Position(1, 6) to PieceType.SERGEANT,
-            Position(1, 7) to PieceType.LIEUTENANT,
-            Position(1, 8) to PieceType.LIEUTENANT,
-            Position(1, 9) to PieceType.LIEUTENANT,
+            // 2. sıra (10 taş) - Orta savunma
+            Position(1, 0) to PieceType.SERGEANT,
+            Position(1, 1) to PieceType.SERGEANT,
+            Position(1, 2) to PieceType.LIEUTENANT,
+            Position(1, 3) to PieceType.LIEUTENANT,
+            Position(1, 4) to PieceType.LIEUTENANT,
+            Position(1, 5) to PieceType.LIEUTENANT,
+            Position(1, 6) to PieceType.CAPTAIN,
+            Position(1, 7) to PieceType.CAPTAIN,
+            Position(1, 8) to PieceType.CAPTAIN,
+            Position(1, 9) to PieceType.CAPTAIN,
 
-            // Üçüncü sıra - güçlü savunma
-            Position(2, 0) to PieceType.LIEUTENANT,
-            Position(2, 1) to PieceType.CAPTAIN,
-            Position(2, 2) to PieceType.CAPTAIN,
-            Position(2, 3) to PieceType.CAPTAIN,
-            Position(2, 8) to PieceType.CAPTAIN,
-            Position(2, 9) to PieceType.MAJOR,
+            // 3. sıra (10 taş) - Güçlü savunma
+            Position(2, 0) to PieceType.MAJOR,
+            Position(2, 1) to PieceType.MAJOR,
+            Position(2, 2) to PieceType.MAJOR,
+            Position(2, 3) to PieceType.COLONEL,
+            Position(2, 4) to PieceType.COLONEL,
+            Position(2, 5) to PieceType.GENERAL,
+            Position(2, 6) to PieceType.MARSHAL,
+            Position(2, 7) to PieceType.SPY,
+            Position(2, 8) to PieceType.MINER,
+            Position(2, 9) to PieceType.MINER,
 
-            // Dördüncü sıra - en güçlü taşlar
-            Position(3, 0) to PieceType.MAJOR,
-            Position(3, 1) to PieceType.MAJOR,
-            Position(3, 2) to PieceType.COLONEL,
-            Position(3, 3) to PieceType.COLONEL,
-            Position(3, 8) to PieceType.GENERAL,
-            Position(3, 9) to PieceType.MARSHAL
+            // 4. sıra (10 taş) - Arka savunma
+            Position(3, 0) to PieceType.MINER,
+            Position(3, 1) to PieceType.MINER,
+            Position(3, 2) to PieceType.MINER,
+            Position(3, 3) to PieceType.BOMB,
+            Position(3, 4) to PieceType.FLAG,
+            Position(3, 5) to PieceType.BOMB,
+            Position(3, 6) to PieceType.BOMB,
+            Position(3, 7) to PieceType.BOMB,
+            Position(3, 8) to PieceType.BOMB,
+            Position(3, 9) to PieceType.BOMB
         )
     }
 
     fun getBalancedSetup(): Map<Position, PieceType> {
-        // Dengeli bir dağılım
         return mapOf(
-            // Karışık stratejik yerleşim...
-            // Detayları gerektiğinde eklenebilir
+            // 1. sıra (10 taş) - Karışık ön hat
+            Position(0, 0) to PieceType.SCOUT,
+            Position(0, 1) to PieceType.SCOUT,
+            Position(0, 2) to PieceType.SERGEANT,
+            Position(0, 3) to PieceType.LIEUTENANT,
+            Position(0, 4) to PieceType.CAPTAIN,
+            Position(0, 5) to PieceType.CAPTAIN,
+            Position(0, 6) to PieceType.LIEUTENANT,
+            Position(0, 7) to PieceType.SERGEANT,
+            Position(0, 8) to PieceType.SCOUT,
+            Position(0, 9) to PieceType.SCOUT,
+
+            // 2. sıra (10 taş) - Dengeli dağılım
+            Position(1, 0) to PieceType.SCOUT,
+            Position(1, 1) to PieceType.MINER,
+            Position(1, 2) to PieceType.LIEUTENANT,
+            Position(1, 3) to PieceType.CAPTAIN,
+            Position(1, 4) to PieceType.MAJOR,
+            Position(1, 5) to PieceType.MAJOR,
+            Position(1, 6) to PieceType.CAPTAIN,
+            Position(1, 7) to PieceType.LIEUTENANT,
+            Position(1, 8) to PieceType.MINER,
+            Position(1, 9) to PieceType.SCOUT,
+
+            // 3. sıra (10 taş) - Güçlü orta hat
+            Position(2, 0) to PieceType.SCOUT,
+            Position(2, 1) to PieceType.SERGEANT,
+            Position(2, 2) to PieceType.MAJOR,
+            Position(2, 3) to PieceType.COLONEL,
+            Position(2, 4) to PieceType.GENERAL,
+            Position(2, 5) to PieceType.MARSHAL,
+            Position(2, 6) to PieceType.COLONEL,
+            Position(2, 7) to PieceType.SPY,
+            Position(2, 8) to PieceType.SERGEANT,
+            Position(2, 9) to PieceType.SCOUT,
+
+            // 4. sıra (10 taş) - Savunma hattı
+            Position(3, 0) to PieceType.BOMB,
+            Position(3, 1) to PieceType.MINER,
+            Position(3, 2) to PieceType.BOMB,
+            Position(3, 3) to PieceType.FLAG,
+            Position(3, 4) to PieceType.BOMB,
+            Position(3, 5) to PieceType.BOMB,
+            Position(3, 6) to PieceType.BOMB,
+            Position(3, 7) to PieceType.BOMB,
+            Position(3, 8) to PieceType.MINER,
+            Position(3, 9) to PieceType.MINER
         )
     }
 }

@@ -1,29 +1,18 @@
 package com.stratego.game.ui.setup
 
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stratego.game.models.*
-import kotlin.math.roundToInt
 
 /**
  * Taş yerleştirme ana ekranı
@@ -35,13 +24,11 @@ fun PieceSetupScreen(
     onSetupComplete: (Map<Position, PieceType>) -> Unit,
     onBackPressed: () -> Unit
 ) {
-    var gameState by remember { mutableStateOf(GameState()) }
     var availablePieces by remember { mutableStateOf(createInitialPiecePool()) }
     var placedPieces by remember { mutableStateOf<Map<Position, PieceType>>(emptyMap()) }
-    var draggedPiece by remember { mutableStateOf<PieceType?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-    var selectedTemplate by remember { mutableStateOf<String?>(null) }
-    var setupTimeRemaining by remember { mutableStateOf(240) } // 4 dakika
+    var selectedPiece by remember { mutableStateOf<PieceType?>(null) }
+    var selectedPosition by remember { mutableStateOf<Position?>(null) }
+    var setupTimeRemaining by remember { mutableStateOf(240) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
     // Geri sayım timer
@@ -58,7 +45,7 @@ fun PieceSetupScreen(
             .background(Color(0xFFF5F5F5))
             .padding(16.dp)
     ) {
-        // Üst bar - zaman ve kontroller
+        // Üst bar
         SetupTopBar(
             timeRemaining = setupTimeRemaining,
             onTemplateClick = { showTemplateDialog = true },
@@ -71,34 +58,50 @@ fun PieceSetupScreen(
         GameBoardSetupView(
             placedPieces = placedPieces,
             player = player,
-            onPieceDropped = { position, pieceType ->
-                if (canPlacePiece(position, player)) {
-                    placedPieces = placedPieces + (position to pieceType)
-                    availablePieces = removePieceFromPool(availablePieces, pieceType)
+            selectedPosition = selectedPosition,
+            onSquareClick = { position ->
+                when {
+                    // Taş seçili ve boş kareye tıkladı
+                    selectedPiece != null && !placedPieces.containsKey(position) && canPlacePiece(position, player) -> {
+                        placedPieces = placedPieces + (position to selectedPiece!!)
+                        availablePieces = removePieceFromPool(availablePieces, selectedPiece!!)
+                        selectedPiece = null
+                        selectedPosition = null
+                    }
+                    // Dolu kareye tıkladı - taşı kaldır
+                    placedPieces.containsKey(position) -> {
+                        val pieceType = placedPieces[position]!!
+                        placedPieces = placedPieces - position
+                        availablePieces = addPieceToPool(availablePieces, pieceType)
+                        selectedPosition = null
+                    }
+                    // Boş kareyi seçti
+                    canPlacePiece(position, player) -> {
+                        selectedPosition = position
+                    }
                 }
-            },
-            onPieceRemoved = { position ->
-                placedPieces[position]?.let { pieceType ->
-                    placedPieces = placedPieces - position
-                    availablePieces = addPieceToPool(availablePieces, pieceType)
-                }
-            },
-            draggedPiece = draggedPiece,
-            dragOffset = dragOffset
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Mevcut taşlar listesi
+        // Taş seçimi grid
         AvailablePiecesSection(
             availablePieces = availablePieces,
-            onPieceDragStart = { pieceType, offset ->
-                draggedPiece = pieceType
-                dragOffset = offset
-            },
-            onPieceDragEnd = {
-                draggedPiece = null
-                dragOffset = Offset.Zero
+            selectedPiece = selectedPiece,
+            onPieceSelected = { pieceType ->
+                if (availablePieces[pieceType]!! > 0) {
+                    selectedPiece = pieceType
+                    // Eğer pozisyon seçiliyse, taşı oraya yerleştir
+                    selectedPosition?.let { position ->
+                        if (canPlacePiece(position, player)) {
+                            placedPieces = placedPieces + (position to pieceType)
+                            availablePieces = removePieceFromPool(availablePieces, pieceType)
+                            selectedPiece = null
+                            selectedPosition = null
+                        }
+                    }
+                }
             }
         )
 
@@ -107,9 +110,12 @@ fun PieceSetupScreen(
         // Alt kontroller
         SetupBottomControls(
             isSetupComplete = placedPieces.size == 40,
+            remainingPieces = 40 - placedPieces.size,
             onResetClick = {
                 placedPieces = emptyMap()
                 availablePieces = createInitialPiecePool()
+                selectedPiece = null
+                selectedPosition = null
             },
             onCompleteClick = {
                 if (placedPieces.size == 40) {
@@ -119,17 +125,18 @@ fun PieceSetupScreen(
         )
     }
 
-    // Şablon seçim dialog
+    // Şablon dialog
     if (showTemplateDialog) {
         TemplateSelectionDialog(
             onTemplateSelected = { template ->
                 applyTemplate(template, player)?.let { newPlacement ->
                     placedPieces = newPlacement
                     availablePieces = createInitialPiecePool()
-                    // Yerleştirilen taşları havuzdan çıkar
                     newPlacement.values.forEach { pieceType ->
                         availablePieces = removePieceFromPool(availablePieces, pieceType)
                     }
+                    selectedPiece = null
+                    selectedPosition = null
                 }
                 showTemplateDialog = false
             },
@@ -186,13 +193,9 @@ fun SetupTopBar(
 fun GameBoardSetupView(
     placedPieces: Map<Position, PieceType>,
     player: Player,
-    onPieceDropped: (Position, PieceType) -> Unit,
-    onPieceRemoved: (Position) -> Unit,
-    draggedPiece: PieceType?,
-    dragOffset: Offset
+    selectedPosition: Position?,
+    onSquareClick: (Position) -> Unit
 ) {
-    val density = LocalDensity.current
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -222,39 +225,13 @@ fun GameBoardSetupView(
                                 piece = placedPieces[position],
                                 isPlayerArea = isPlayerSetupArea(position, player),
                                 isWater = position.isWater(),
-                                onPieceDropped = { pieceType ->
-                                    onPieceDropped(position, pieceType)
-                                },
-                                onPieceRemoved = {
-                                    onPieceRemoved(position)
-                                }
+                                isSelected = position == selectedPosition,
+                                onClick = { onSquareClick(position) }
                             )
                         }
                     }
                 }
             }
-        }
-    }
-
-    // Sürüklenen taş overlay
-    if (draggedPiece != null) {
-        Box(
-            modifier = Modifier
-                .offset {
-                    IntOffset(
-                        dragOffset.x.roundToInt(),
-                        dragOffset.y.roundToInt()
-                    )
-                }
-                .size(40.dp)
-                .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                .border(2.dp, Color(0xFF1976D2), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = draggedPiece.emoji,
-                fontSize = 24.sp
-            )
         }
     }
 }
@@ -268,17 +245,20 @@ fun BoardSquare(
     piece: PieceType?,
     isPlayerArea: Boolean,
     isWater: Boolean,
-    onPieceDropped: (PieceType) -> Unit,
-    onPieceRemoved: () -> Unit
+    isSelected: Boolean,
+    onClick: () -> Unit
 ) {
-    var isDragOver by remember { mutableStateOf(false) }
-
     val backgroundColor = when {
         isWater -> Color(0xFF4FC3F7)
-        isDragOver && isPlayerArea -> Color(0xFFFFEB3B)
+        isSelected -> Color(0xFFFFEB3B)
         isPlayerArea -> Color(0xFFE8F5E8)
         (position.row + position.col) % 2 == 0 -> Color(0xFFF0D9B5)
         else -> Color(0xFFB58863)
+    }
+
+    val borderColor = when {
+        isSelected -> Color(0xFFFF5722)
+        else -> Color.Black.copy(alpha = 0.2f)
     }
 
     Box(
@@ -286,46 +266,37 @@ fun BoardSquare(
             .size(32.dp)
             .background(backgroundColor)
             .border(
-                width = 1.dp,
-                color = Color.Black.copy(alpha = 0.2f)
+                width = if (isSelected) 2.dp else 1.dp,
+                color = borderColor
             )
-            .pointerInput(Unit) {
-                // Drag & Drop algılama
-                detectDragGestures(
-                    onDragStart = { },
-                    onDragEnd = { isDragOver = false },
-                    onDrag = { change, _ ->
-                        isDragOver = isPlayerArea
-                    }
-                )
-            }
-            .clickable {
-                if (piece != null && isPlayerArea) {
-                    onPieceRemoved()
-                }
-            },
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (piece != null) {
-            Text(
-                text = piece.emoji,
-                fontSize = 16.sp,
-                modifier = Modifier.alpha(if (isPlayerArea) 1f else 0.3f)
-            )
-        } else if (isWater) {
-            Text("🌊", fontSize = 12.sp)
+        when {
+            piece != null -> {
+                Text(
+                    text = piece.emoji,
+                    fontSize = 16.sp
+                )
+            }
+            isWater -> {
+                Text("🌊", fontSize = 12.sp)
+            }
+            isSelected -> {
+                Text("⭕", fontSize = 16.sp, color = Color(0xFFFF5722))
+            }
         }
     }
 }
 
 /**
- * Mevcut taşlar bölümü
+ * Mevcut taşlar bölümü - 3 satır x 4 sütun grid
  */
 @Composable
 fun AvailablePiecesSection(
     availablePieces: Map<PieceType, Int>,
-    onPieceDragStart: (PieceType, Offset) -> Unit,
-    onPieceDragEnd: () -> Unit
+    onPieceSelected: (PieceType) -> Unit,
+    selectedPiece: PieceType? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -341,18 +312,34 @@ fun AvailablePiecesSection(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(availablePieces.toList()) { (pieceType, count) ->
-                    if (count > 0) {
-                        PieceItem(
+            // 3 satır x 4 sütun grid
+            val pieceTypes = PieceType.values().toList()
+            val rows = pieceTypes.chunked(4) // Her satırda 4 taş
+
+            rows.forEach { rowPieces ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    rowPieces.forEach { pieceType ->
+                        val count = availablePieces[pieceType] ?: 0
+                        PieceGridItem(
                             pieceType = pieceType,
                             count = count,
-                            onDragStart = onPieceDragStart,
-                            onDragEnd = onPieceDragEnd
+                            isSelected = selectedPiece == pieceType,
+                            onPieceClick = { onPieceSelected(pieceType) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
+
+                    // Eksik sütunları doldur
+                    repeat(4 - rowPieces.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+
+                if (rowPieces != rows.last()) {
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -360,67 +347,79 @@ fun AvailablePiecesSection(
 }
 
 /**
- * Taş öğesi
+ * Grid taş öğesi
  */
 @Composable
-fun PieceItem(
+fun PieceGridItem(
     pieceType: PieceType,
     count: Int,
-    onDragStart: (PieceType, Offset) -> Unit,
-    onDragEnd: () -> Unit
+    isSelected: Boolean,
+    onPieceClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var isDragging by remember { mutableStateOf(false) }
-    var elementPosition by remember { mutableStateOf(Offset.Zero) }
-
     Card(
-        modifier = Modifier
-            .width(80.dp)
-            .onGloballyPositioned { coordinates ->
-                elementPosition = coordinates.positionInRoot()
-            }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        isDragging = true
-                        onDragStart(pieceType, elementPosition + offset)
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        onDragEnd()
-                    },
-                    onDrag = { change, _ ->
-                        // Drag handling
-                    }
-                )
-            }
-            .alpha(if (isDragging) 0.5f else 1f),
+        modifier = modifier
+            .padding(4.dp)
+            .clickable { if (count > 0) onPieceClick() },
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = when {
+                count == 0 -> Color.Gray.copy(alpha = 0.3f)
+                isSelected -> Color(0xFFFFEB3B).copy(alpha = 0.7f)
+                else -> Color.White
+            }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 8.dp else 2.dp
+        )
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier
+                .padding(8.dp)
+                .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Taş emoji
             Text(
                 text = pieceType.emoji,
-                fontSize = 24.sp
+                fontSize = 20.sp,
+                modifier = Modifier.alpha(if (count > 0) 1f else 0.3f)
             )
 
+            // Taş adı (kısaltılmış)
             Text(
-                text = pieceType.displayName,
-                fontSize = 10.sp,
+                text = when (pieceType) {
+                    PieceType.MARSHAL -> "Mareşal"
+                    PieceType.GENERAL -> "General"
+                    PieceType.COLONEL -> "Albay"
+                    PieceType.MAJOR -> "Binbaşı"
+                    PieceType.CAPTAIN -> "Yüzbaşı"
+                    PieceType.LIEUTENANT -> "Teğmen"
+                    PieceType.SERGEANT -> "Astsubay"
+                    PieceType.SCOUT -> "Keşifçi"
+                    PieceType.MINER -> "Miner"
+                    PieceType.SPY -> "Casus"
+                    PieceType.BOMB -> "Bomba"
+                    PieceType.FLAG -> "Bayrak"
+                },
+                fontSize = 9.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 1,
+                color = if (count > 0) Color.Black else Color.Gray
             )
 
+            // Adet göstergesi
             if (count > 1) {
                 Text(
                     text = "($count)",
-                    fontSize = 12.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1976D2)
+                )
+            } else if (count == 0) {
+                Text(
+                    text = "(0)",
+                    fontSize = 10.sp,
+                    color = Color.Gray
                 )
             }
         }
@@ -433,6 +432,7 @@ fun PieceItem(
 @Composable
 fun SetupBottomControls(
     isSetupComplete: Boolean,
+    remainingPieces: Int,
     onResetClick: () -> Unit,
     onCompleteClick: () -> Unit
 ) {
@@ -440,7 +440,6 @@ fun SetupBottomControls(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Reset butonu
         OutlinedButton(
             onClick = onResetClick,
             modifier = Modifier.weight(1f)
@@ -448,7 +447,6 @@ fun SetupBottomControls(
             Text("🔄 Sıfırla")
         }
 
-        // Tamamla butonu
         Button(
             onClick = onCompleteClick,
             enabled = isSetupComplete,
@@ -458,7 +456,7 @@ fun SetupBottomControls(
             )
         ) {
             Text(
-                text = if (isSetupComplete) "✅ Hazır!" else "❌ ${40 - 0} taş kaldı", // TODO: Calculate remaining
+                text = if (isSetupComplete) "✅ Hazır!" else "❌ $remainingPieces taş kaldı",
                 fontWeight = FontWeight.Bold
             )
         }
@@ -490,7 +488,7 @@ fun TemplateSelectionDialog(
 
                 TemplateOption(
                     title = "🛡️ Savunma",
-                    description = "Kaşifler önde, bayrak iyi korunmuş",
+                    description = "Keşifler önde, bayrak iyi korunmuş",
                     onClick = { onTemplateSelected("defensive") }
                 )
 
@@ -577,8 +575,8 @@ fun addPieceToPool(pool: Map<PieceType, Int>, pieceType: PieceType): Map<PieceTy
  */
 fun isPlayerSetupArea(position: Position, player: Player): Boolean {
     return when (player) {
-        Player.PLAYER1 -> position.row in 0..3
-        Player.PLAYER2 -> position.row in 6..9
+        Player.PLAYER1 -> position.row in 6..9  // Alt 4 sıra (oyuncu)
+        Player.PLAYER2 -> position.row in 0..3  // Üst 4 sıra (rakip)
     }
 }
 
@@ -600,12 +598,12 @@ fun applyTemplate(template: String, player: Player): Map<Position, PieceType>? {
         else -> return null
     }
 
-    // Player 2 için pozisyonları çevir
-    return if (player == Player.PLAYER2) {
+    // Player 1 için pozisyonları alt 4 sıraya çevir (6-9)
+    return if (player == Player.PLAYER1) {
         baseTemplate.mapKeys { (pos, _) ->
-            Position(9 - pos.row, pos.col)
+            Position(pos.row + 6, pos.col) // 0-3 → 6-9'a kaydır
         }
     } else {
-        baseTemplate
+        baseTemplate // Player 2 için aynı kalsın (0-3)
     }
 }

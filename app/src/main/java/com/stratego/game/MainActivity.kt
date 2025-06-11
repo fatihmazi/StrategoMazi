@@ -518,7 +518,9 @@ fun GameActionButtons(
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "Oyun ekranı henüz hazır değil: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    println("GameActivity Error: ${e.message}")
+                    println("Stack trace: ${e.stackTrace.joinToString("\n")}")
+                    android.widget.Toast.makeText(context, "Hata: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                 }
             },
             modifier = Modifier
