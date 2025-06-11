@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha  // ← Eksik olan import
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +29,8 @@ fun PieceSetupScreen(
     var placedPieces by remember { mutableStateOf<Map<Position, PieceType>>(emptyMap()) }
     var selectedPiece by remember { mutableStateOf<PieceType?>(null) }
     var selectedPosition by remember { mutableStateOf<Position?>(null) }
+    var lastClickedPosition by remember { mutableStateOf<Position?>(null) } // Çift tıklama için
+    var lastClickTime by remember { mutableStateOf(0L) } // Çift tıklama zamanı
     var setupTimeRemaining by remember { mutableStateOf(240) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
@@ -60,26 +63,64 @@ fun PieceSetupScreen(
             player = player,
             selectedPosition = selectedPosition,
             onSquareClick = { position ->
+                val currentTime = System.currentTimeMillis()
+
                 when {
-                    // Taş seçili ve boş kareye tıkladı
-                    selectedPiece != null && !placedPieces.containsKey(position) && canPlacePiece(position, player) -> {
-                        placedPieces = placedPieces + (position to selectedPiece!!)
-                        availablePieces = removePieceFromPool(availablePieces, selectedPiece!!)
-                        selectedPiece = null
-                        selectedPosition = null
-                    }
-                    // Dolu kareye tıkladı - taşı kaldır
-                    placedPieces.containsKey(position) -> {
+                    // ÇİFT TIKLAMA: Aynı pozisyona 500ms içinde tıklandı - taşı kaldır
+                    lastClickedPosition == position && (currentTime - lastClickTime) < 500 && placedPieces.containsKey(position) -> {
                         val pieceType = placedPieces[position]!!
                         placedPieces = placedPieces - position
                         availablePieces = addPieceToPool(availablePieces, pieceType)
                         selectedPosition = null
+                        lastClickedPosition = null
                     }
+
+                    // TAŞI TAŞIMA: Bir pozisyon seçili ve başka yere tıklandı
+                    selectedPosition != null && selectedPosition != position && canPlacePiece(position, player) -> {
+                        val fromPos = selectedPosition!!
+                        val fromPiece = placedPieces[fromPos]
+                        val toPiece = placedPieces[position]
+
+                        when {
+                            // İki taş yer değiştir
+                            fromPiece != null && toPiece != null -> {
+                                placedPieces = placedPieces + (fromPos to toPiece) + (position to fromPiece)
+                            }
+                            // Taşı boş alana taşı
+                            fromPiece != null && toPiece == null -> {
+                                placedPieces = (placedPieces - fromPos) + (position to fromPiece)
+                            }
+                        }
+                        selectedPosition = null
+                    }
+
+                    // Taş seçili ve boş kareye tıkladı - HIZLI YERLEŞTIRME
+                    selectedPiece != null && !placedPieces.containsKey(position) && canPlacePiece(position, player) -> {
+                        placedPieces = placedPieces + (position to selectedPiece!!)
+                        availablePieces = removePieceFromPool(availablePieces, selectedPiece!!)
+
+                        // HIZLI YERLEŞTIRME: Eğer hala adet varsa taş seçili kalsın
+                        if (availablePieces[selectedPiece]!! <= 0) {
+                            selectedPiece = null
+                        }
+                        selectedPosition = null
+                    }
+
+                    // Dolu kareye tıkladı - taşı seç (taşıma için)
+                    placedPieces.containsKey(position) -> {
+                        selectedPosition = position
+                        selectedPiece = null // Taş seçimini temizle
+                    }
+
                     // Boş kareyi seçti
                     canPlacePiece(position, player) -> {
                         selectedPosition = position
                     }
                 }
+
+                // Son tıklama bilgilerini güncelle
+                lastClickedPosition = position
+                lastClickTime = currentTime
             }
         )
 
@@ -97,7 +138,10 @@ fun PieceSetupScreen(
                         if (canPlacePiece(position, player)) {
                             placedPieces = placedPieces + (position to pieceType)
                             availablePieces = removePieceFromPool(availablePieces, pieceType)
-                            selectedPiece = null
+                            // HIZLI YERLEŞTIRME: Eğer hala adet varsa seçili kalsın
+                            if (availablePieces[pieceType]!! <= 0) {
+                                selectedPiece = null
+                            }
                             selectedPosition = null
                         }
                     }
@@ -159,9 +203,12 @@ fun SetupTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Geri butonu
-        IconButton(onClick = onBackPressed) {
-            Text("← Geri", fontSize = 16.sp)
+        // Geri butonu - net görünüm
+        Button(
+            onClick = onBackPressed,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE3F2FD))
+        ) {
+            Text("Geri", fontSize = 16.sp, color = Color(0xFF1976D2))
         }
 
         // Zaman göstergesi
@@ -201,20 +248,10 @@ fun GameBoardSetupView(
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Tahta başlığı
-            Text(
-                text = "🏰 Taş Yerleştirme Alanı",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 10x10 tahta grid
+            // 10x10 tahta grid - başlık kaldırıldı
             Column {
                 for (row in 0..9) {
                     Row {
@@ -290,7 +327,7 @@ fun BoardSquare(
 }
 
 /**
- * Mevcut taşlar bölümü - 3 satır x 4 sütun grid
+ * Mevcut taşlar bölümü - 3 satır görünür hale getirildi
  */
 @Composable
 fun AvailablePiecesSection(
@@ -301,25 +338,22 @@ fun AvailablePiecesSection(
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
+        // 3 satırın tamamı görünür olacak şekilde düzenlendi
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(8.dp) // Daha fazla padding
         ) {
-            Text(
-                text = "🎯 Yerleştirilecek Taşlar",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 3 satır x 4 sütun grid
+            // 3 satır x 4 sütun grid - fixed height ile 3 satır garantili
             val pieceTypes = PieceType.values().toList()
             val rows = pieceTypes.chunked(4) // Her satırda 4 taş
 
-            rows.forEach { rowPieces ->
+            rows.forEachIndexed { rowIndex, rowPieces ->
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(75.dp) // 60dp'den 75dp'ye artırıldı
+                        .padding(vertical = 2.dp), // Satırlar arası boşluk
+                    horizontalArrangement = Arrangement.spacedBy(4.dp), // Kutucuklar arası boşluk
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     rowPieces.forEach { pieceType ->
                         val count = availablePieces[pieceType] ?: 0
@@ -336,10 +370,6 @@ fun AvailablePiecesSection(
                     repeat(4 - rowPieces.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
-                }
-
-                if (rowPieces != rows.last()) {
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -382,7 +412,7 @@ fun PieceGridItem(
             Text(
                 text = pieceType.emoji,
                 fontSize = 20.sp,
-                modifier = Modifier.alpha(if (count > 0) 1f else 0.3f)
+                modifier = Modifier.alpha(if (count > 0) 1f else 0.3f)  // ← Bu satırda alpha kullanılıyor
             )
 
             // Taş adı (kısaltılmış)
