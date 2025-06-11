@@ -511,8 +511,15 @@ fun GameActionButtons(
         // AI antrenman
         OutlinedButton(
             onClick = {
-                // Test mesajı
-                android.widget.Toast.makeText(context, "🤖 AI antrenman modu geliştiriliyor...", android.widget.Toast.LENGTH_SHORT).show()
+                try {
+                    val intent = Intent(context, GameActivity::class.java).apply {
+                        putExtra("GAME_ID", "practice_game_123")
+                        putExtra("PLAYER_NUMBER", 1)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Oyun ekranı henüz hazır değil: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
