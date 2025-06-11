@@ -1,5 +1,6 @@
 package com.stratego.game
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
 fun StrategoMainScreen() {
     var isLoggedIn by remember { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf<UserProfile?>(null) }
+    val context = LocalContext.current
 
     // Kullanıcı giriş durumu kontrolü
     LaunchedEffect(Unit) {
@@ -79,8 +81,19 @@ fun StrategoMainScreen() {
         }
     }
 
-    if (isLoggedIn && currentUser != null) {
-        GameLobbyScreen(currentUser!!)
+    // Test için giriş kontrolünü bypass et
+    if (true) { // isLoggedIn && currentUser != null yerine
+        val testUser = UserProfile(
+            uid = "test_123",
+            displayName = "Test Oyuncu",
+            email = "test@example.com",
+            photoUrl = "",
+            gamesPlayed = 0,  // ← 0 yap
+            gamesWon = 0,     // ← 0 yap
+            currentStreak = 0, // ← 0 yap
+            isOnline = true
+        )
+        GameLobbyScreen(testUser, context)
     } else {
         LoginScreen(onLoginSuccess = { user ->
             currentUser = user
@@ -239,7 +252,7 @@ fun LoginScreen(onLoginSuccess: (UserProfile) -> Unit) {
  * Ana oyun lobi ekranı
  */
 @Composable
-fun GameLobbyScreen(user: UserProfile) {
+fun GameLobbyScreen(user: UserProfile, context: Context) {
     var onlineUsers by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
     var incomingInvites by remember { mutableStateOf<List<GameInvite>>(emptyList()) }
     var isSearchingRandomGame by remember { mutableStateOf(false) }
@@ -292,18 +305,30 @@ fun GameLobbyScreen(user: UserProfile) {
         // Oyun butonları
         GameActionButtons(
             isSearchingRandomGame = isSearchingRandomGame,
+            context = context,
             onRandomGameClick = {
-                scope.launch {
-                    if (isSearchingRandomGame) {
-                        firebaseRepository.leaveMatchmakingQueue(user.uid)
-                    } else {
-                        firebaseRepository.joinMatchmakingQueue(user.uid)
+                // Test için mock eşleştirme
+                isSearchingRandomGame = !isSearchingRandomGame
+
+                if (isSearchingRandomGame) {
+                    // 3 saniye sonra mock eşleştirme
+                    scope.launch {
+                        kotlinx.coroutines.delay(3000)
+                        val intent = Intent(context, GameActivity::class.java).apply {
+                            putExtra("GAME_ID", "random_game_456")
+                            putExtra("PLAYER_NUMBER", 1)
+                        }
+                        context.startActivity(intent)
+                        isSearchingRandomGame = false
                     }
-                    isSearchingRandomGame = !isSearchingRandomGame
                 }
             },
             onPracticeClick = {
-                println("AI antrenman modu açılıyor...")
+                val intent = Intent(context, GameActivity::class.java).apply {
+                    putExtra("GAME_ID", "practice_game_123")
+                    putExtra("PLAYER_NUMBER", 1)
+                }
+                context.startActivity(intent)
             }
         )
 
@@ -455,23 +480,27 @@ fun InviteItem(
 @Composable
 fun GameActionButtons(
     isSearchingRandomGame: Boolean,
+    context: Context,
     onRandomGameClick: () -> Unit,
     onPracticeClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // Rastgele rakip bul
         Button(
-            onClick = onRandomGameClick,
+            onClick = {
+                // Test mesajı
+                android.widget.Toast.makeText(context, "🎯 Rastgele rakip aranıyor...", android.widget.Toast.LENGTH_SHORT).show()
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isSearchingRandomGame) Color(0xFFF44336) else Color(0xFF4CAF50)
+                containerColor = Color(0xFF4CAF50)
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = if (isSearchingRandomGame) "⏹️ Aramayı Durdur" else "🎯 Rastgele Rakip Bul",
+                text = "🎯 Rastgele Rakip Bul",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -481,7 +510,10 @@ fun GameActionButtons(
 
         // AI antrenman
         OutlinedButton(
-            onClick = onPracticeClick,
+            onClick = {
+                // Test mesajı
+                android.widget.Toast.makeText(context, "🤖 AI antrenman modu geliştiriliyor...", android.widget.Toast.LENGTH_SHORT).show()
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -495,6 +527,7 @@ fun GameActionButtons(
         }
     }
 }
+
 
 /**
  * Çevrimiçi oyuncular bölümü

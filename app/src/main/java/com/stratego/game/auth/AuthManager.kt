@@ -12,7 +12,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
@@ -27,17 +26,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-
 /**
  * Firebase Authentication işlemlerini yöneten sınıf
- * Google Sign-In entegrasyonu ve kullanıcı durumu yönetimi
  */
 class AuthManager(private val context: Context) {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
 
-    // Google Sign-In konfigürasyonu
     private val googleSignInOptions = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken("618450109098-ibq8bgunnp80vkk5hmh017dl2kp4hgi5.apps.googleusercontent.com")
         .requestEmail()
@@ -45,9 +41,6 @@ class AuthManager(private val context: Context) {
 
     private val googleSignInClient: GoogleSignInClient = GoogleSignIn.getClient(context, googleSignInOptions)
 
-    /**
-     * Mevcut kullanıcı durumunu Flow olarak döndürür
-     */
     val currentUser: Flow<FirebaseUser?> = callbackFlow {
         val authStateListener = FirebaseAuth.AuthStateListener { auth ->
             trySend(auth.currentUser)
@@ -59,16 +52,10 @@ class AuthManager(private val context: Context) {
         }
     }.distinctUntilChanged()
 
-    /**
-     * Google Sign-In intent'i oluşturur
-     */
     fun createGoogleSignInIntent(): Intent {
         return googleSignInClient.signInIntent
     }
 
-    /**
-     * Google Sign-In sonucunu işler
-     */
     suspend fun handleGoogleSignInResult(data: Intent?): AuthResult {
         return try {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
@@ -84,9 +71,6 @@ class AuthManager(private val context: Context) {
         }
     }
 
-    /**
-     * Google hesabı ile Firebase'e giriş yapar
-     */
     private suspend fun firebaseAuthWithGoogle(account: GoogleSignInAccount): AuthResult {
         return try {
             val credential = GoogleAuthProvider.getCredential(account.idToken, null)
@@ -94,7 +78,6 @@ class AuthManager(private val context: Context) {
             val user = result.user
 
             if (user != null) {
-                // Kullanıcı profilini veritabanına kaydet
                 saveUserProfile(user, account)
                 AuthResult.Success(user)
             } else {
@@ -105,9 +88,6 @@ class AuthManager(private val context: Context) {
         }
     }
 
-    /**
-     * Kullanıcı profilini Firebase Realtime Database'e kaydeder
-     */
     private suspend fun saveUserProfile(user: FirebaseUser, account: GoogleSignInAccount) {
         try {
             val userProfile = mapOf(
@@ -125,8 +105,6 @@ class AuthManager(private val context: Context) {
             )
 
             database.child("users").child(user.uid).setValue(userProfile).await()
-
-            // Kullanıcıyı online olarak işaretle
             setUserOnlineStatus(user.uid, true)
 
         } catch (e: Exception) {
@@ -134,16 +112,12 @@ class AuthManager(private val context: Context) {
         }
     }
 
-    /**
-     * Kullanıcının online durumunu günceller
-     */
     private fun setUserOnlineStatus(userId: String, isOnline: Boolean) {
         val userStatusRef = database.child("users").child(userId).child("isOnline")
         val lastSeenRef = database.child("users").child(userId).child("lastSeenAt")
 
         if (isOnline) {
             userStatusRef.setValue(true)
-            // Kullanıcı çevrimdışı olduğunda otomatik güncelleme
             userStatusRef.onDisconnect().setValue(false)
             lastSeenRef.onDisconnect().setValue(System.currentTimeMillis())
         } else {
@@ -152,20 +126,13 @@ class AuthManager(private val context: Context) {
         }
     }
 
-    /**
-     * Kullanıcı çıkış işlemi
-     */
     suspend fun signOut(): Boolean {
         return try {
-            // Online durumunu false yap
             auth.currentUser?.let { user ->
                 setUserOnlineStatus(user.uid, false)
             }
 
-            // Firebase'den çıkış yap
             auth.signOut()
-
-            // Google hesabından çıkış yap
             googleSignInClient.signOut().await()
 
             true
@@ -175,32 +142,20 @@ class AuthManager(private val context: Context) {
         }
     }
 
-    /**
-     * Mevcut kullanıcıyı döndürür
-     */
     fun getCurrentUser(): FirebaseUser? {
         return auth.currentUser
     }
 
-    /**
-     * Kullanıcının giriş yapıp yapmadığını kontrol eder
-     */
     fun isUserSignedIn(): Boolean {
         return auth.currentUser != null
     }
 }
 
-/**
- * Authentication sonuç sınıfları
- */
 sealed class AuthResult {
     data class Success(val user: FirebaseUser) : AuthResult()
     data class Error(val message: String) : AuthResult()
 }
 
-/**
- * Google Sign-In için Composable helper
- */
 @Composable
 fun rememberGoogleSignInLauncher(
     onResult: (AuthResult) -> Unit
@@ -216,9 +171,4 @@ fun rememberGoogleSignInLauncher(
             onResult(authResult)
         }
     }
-}
-
-// Extension fonksiyonlar
-suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T {
-    return kotlinx.coroutines.tasks.await(this)
 }
