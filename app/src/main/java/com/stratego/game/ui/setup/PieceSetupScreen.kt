@@ -7,12 +7,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha  // ← Eksik olan import
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.stratego.game.R
 import com.stratego.game.models.*
 
 /**
@@ -29,8 +33,8 @@ fun PieceSetupScreen(
     var placedPieces by remember { mutableStateOf<Map<Position, PieceType>>(emptyMap()) }
     var selectedPiece by remember { mutableStateOf<PieceType?>(null) }
     var selectedPosition by remember { mutableStateOf<Position?>(null) }
-    var lastClickedPosition by remember { mutableStateOf<Position?>(null) } // Çift tıklama için
-    var lastClickTime by remember { mutableStateOf(0L) } // Çift tıklama zamanı
+    var lastClickedPosition by remember { mutableStateOf<Position?>(null) }
+    var lastClickTime by remember { mutableStateOf(0L) }
     var setupTimeRemaining by remember { mutableStateOf(240) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
@@ -234,7 +238,7 @@ fun SetupTopBar(
 }
 
 /**
- * Oyun tahtası kurulum görünümü
+ * Oyun tahtası kurulum görünümü - JPG arka plan ile
  */
 @Composable
 fun GameBoardSetupView(
@@ -243,27 +247,43 @@ fun GameBoardSetupView(
     selectedPosition: Position?,
     onSquareClick: (Position) -> Unit
 ) {
-    Card(
+    // Ortalanmış container
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // JPG arka plan resmi
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .paint(
+                    painter = painterResource(id = R.drawable.board_background),
+                    contentScale = ContentScale.FillBounds
+                )
         ) {
-            // 10x10 tahta grid - başlık kaldırıldı
-            Column {
+            // 10x10 tahta grid - JPG arka plan üzerinde
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 for (row in 0..9) {
-                    Row {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         for (col in 0..9) {
                             val position = Position(row, col)
-                            BoardSquare(
+                            BoardSquareWithBackground(
                                 position = position,
                                 piece = placedPieces[position],
                                 isPlayerArea = isPlayerSetupArea(position, player),
                                 isWater = position.isWater(),
                                 isSelected = position == selectedPosition,
-                                onClick = { onSquareClick(position) }
+                                onClick = { onSquareClick(position) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -274,36 +294,36 @@ fun GameBoardSetupView(
 }
 
 /**
- * Tahta karesi
+ * Tahta karesi - Arka plan + siyah çizgiler
  */
 @Composable
-fun BoardSquare(
+fun BoardSquareWithBackground(
     position: Position,
     piece: PieceType?,
     isPlayerArea: Boolean,
     isWater: Boolean,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val backgroundColor = when {
-        isWater -> Color(0xFF4FC3F7)
-        isSelected -> Color(0xFFFFEB3B)
-        isPlayerArea -> Color(0xFFE8F5E8)
-        (position.row + position.col) % 2 == 0 -> Color(0xFFF0D9B5)
-        else -> Color(0xFFB58863)
+    // Sadece seçim için hafif overlay
+    val overlayColor = when {
+        isSelected -> Color(0xFFFFEB3B).copy(alpha = 0.3f) // Seçili hafif sarı
+        else -> Color.Transparent // Tamamen şeffaf - arka plan görünür
     }
 
+    // Siyah çizgiler - tahta karelerini ayırmak için
     val borderColor = when {
-        isSelected -> Color(0xFFFF5722)
-        else -> Color.Black.copy(alpha = 0.2f)
+        isSelected -> Color(0xFFFF5722) // Seçili turuncu
+        else -> Color.Black.copy(alpha = 0.4f) // Siyah çizgiler
     }
 
     Box(
-        modifier = Modifier
-            .size(32.dp)
-            .background(backgroundColor)
+        modifier = modifier
+            .fillMaxSize()
+            .background(overlayColor) // Sadece seçim overlay'i
             .border(
-                width = if (isSelected) 2.dp else 1.dp,
+                width = if (isSelected) 3.dp else 1.dp, // Seçili kalın, normal ince
                 color = borderColor
             )
             .clickable { onClick() },
@@ -311,16 +331,33 @@ fun BoardSquare(
     ) {
         when {
             piece != null -> {
+                // Taşlar koyu gölge ile net görünür
                 Text(
                     text = piece.emoji,
-                    fontSize = 16.sp
+                    fontSize = 22.sp,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black.copy(alpha = 0.9f),
+                            offset = androidx.compose.ui.geometry.Offset(3f, 3f),
+                            blurRadius = 6f
+                        )
+                    )
                 )
             }
-            isWater -> {
-                Text("🌊", fontSize = 12.sp)
-            }
             isSelected -> {
-                Text("⭕", fontSize = 16.sp, color = Color(0xFFFF5722))
+                // Seçim işareti
+                Text(
+                    "⭕",
+                    fontSize = 20.sp,
+                    color = Color(0xFFFF5722),
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black.copy(alpha = 0.8f),
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
+                    )
+                )
             }
         }
     }
@@ -377,79 +414,83 @@ fun AvailablePiecesSection(
 }
 
 /**
- * Grid taş öğesi
+ * Grid taş öğesi - Dinamik adet sistemi ile
  */
 @Composable
 fun PieceGridItem(
     pieceType: PieceType,
-    count: Int,
+    count: Int, // Gerçek dinamik adet
     isSelected: Boolean,
     onPieceClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier
-            .padding(4.dp)
-            .clickable { if (count > 0) onPieceClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                count == 0 -> Color.Gray.copy(alpha = 0.3f)
-                isSelected -> Color(0xFFFFEB3B).copy(alpha = 0.7f)
-                else -> Color.White
-            }
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 8.dp else 2.dp
-        )
-    ) {
-        Column(
+    Box(modifier = modifier) {
+        // Ana kart
+        Card(
             modifier = Modifier
-                .padding(8.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(2.dp)
+                .height(70.dp)
+                .fillMaxWidth()
+                .clickable { onPieceClick() },
+            colors = CardDefaults.cardColors(
+                containerColor = when {
+                    count == 0 -> Color.Gray.copy(alpha = 0.3f) // Bitmiş taşlar gri
+                    isSelected -> Color(0xFFFFEB3B).copy(alpha = 0.7f)
+                    else -> Color.White
+                }
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isSelected) 8.dp else 2.dp
+            )
         ) {
-            // Taş emoji
-            Text(
-                text = pieceType.emoji,
-                fontSize = 20.sp,
-                modifier = Modifier.alpha(if (count > 0) 1f else 0.3f)  // ← Bu satırda alpha kullanılıyor
-            )
-
-            // Taş adı (kısaltılmış)
-            Text(
-                text = when (pieceType) {
-                    PieceType.MARSHAL -> "Mareşal"
-                    PieceType.GENERAL -> "General"
-                    PieceType.COLONEL -> "Albay"
-                    PieceType.MAJOR -> "Binbaşı"
-                    PieceType.CAPTAIN -> "Yüzbaşı"
-                    PieceType.LIEUTENANT -> "Teğmen"
-                    PieceType.SERGEANT -> "Astsubay"
-                    PieceType.SCOUT -> "Keşifçi"
-                    PieceType.MINER -> "Miner"
-                    PieceType.SPY -> "Casus"
-                    PieceType.BOMB -> "Bomba"
-                    PieceType.FLAG -> "Bayrak"
-                },
-                fontSize = 9.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                color = if (count > 0) Color.Black else Color.Gray
-            )
-
-            // Adet göstergesi
-            if (count > 1) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Simge
                 Text(
-                    text = "($count)",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1976D2)
+                    text = pieceType.emoji,
+                    fontSize = 26.sp,
+                    modifier = Modifier.alpha(if (count > 0) 1f else 0.3f)
                 )
-            } else if (count == 0) {
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Rütbe
                 Text(
-                    text = "(0)",
-                    fontSize = 10.sp,
-                    color = Color.Gray
+                    text = getPieceShortName(pieceType),
+                    fontSize = 11.sp,
+                    color = if (count > 0) Color.Black else Color.Gray,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+
+        // OVERLAY - DINAMIK ADET SAYILARI (%40 görünürlük)
+        if (count > 0) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(color = Color.Transparent),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = count.toString(), // Gerçek dinamik adet
+                    fontSize = 48.sp,
+                    color = Color.White.copy(alpha = 0.4f), // %40 görünürlük
+                    fontWeight = FontWeight.Black,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black.copy(alpha = 0.2f), // Hafif gölge
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
+                    )
                 )
             }
         }
@@ -635,5 +676,25 @@ fun applyTemplate(template: String, player: Player): Map<Position, PieceType>? {
         }
     } else {
         baseTemplate // Player 2 için aynı kalsın (0-3)
+    }
+}
+
+/**
+ * Taş adlarını kısalt - Çavuş güncellendi
+ */
+fun getPieceShortName(pieceType: PieceType): String {
+    return when (pieceType) {
+        PieceType.MARSHAL -> "Mareşal"
+        PieceType.GENERAL -> "General"
+        PieceType.COLONEL -> "Albay"
+        PieceType.MAJOR -> "Binbaşı"
+        PieceType.CAPTAIN -> "Yüzbaşı"
+        PieceType.LIEUTENANT -> "Teğmen"
+        PieceType.SERGEANT -> "Çavuş" // Değiştirildi!
+        PieceType.SCOUT -> "Keşifçi"
+        PieceType.MINER -> "İstihkam"
+        PieceType.SPY -> "Casus"
+        PieceType.BOMB -> "Bomba"
+        PieceType.FLAG -> "Bayrak"
     }
 }
